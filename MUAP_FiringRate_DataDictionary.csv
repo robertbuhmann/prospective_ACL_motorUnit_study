@@ -1,0 +1,28 @@
+variable,description,type
+participant_id,De-identified participant identifier matching the P### convention used in ModellingData.csv.,identifier
+recording_id,De-identified recording identifier unique within participant. Original recording filenames are not released.,identifier
+bout_id,De-identified contraction-bout identifier derived from recording_id and bout number.,identifier
+original_mu_number,Original Delsys motor-unit number within the recording; used with recording_id to identify the same decomposed MU across repeated holds.,identifier
+timepoint,"Assessment timepoint: Pre-op, 2wks, 6wks, 3months, or 6months.",categorical
+limb,ACL-reconstructed/affected limb (ACL) or contralateral limb (Opp).,categorical
+muscle,Vastus medialis (VM) or vastus lateralis (VL).,categorical
+contraction_intensity_percent,"Nominal submaximal contraction intensity (20, 50, or 75% MVC).",categorical
+plateau_n_firings,Number of identified firings within the nominal 10-s plateau window.,integer
+plateau_n_intervals,Number of inter-spike intervals within the nominal plateau window.,integer
+plateau_active_span_s,"Time between first and last plateau firing, seconds.",numeric
+plateau_event_rate_hz,Number of plateau firings divided by 10 s.,numeric
+plateau_train_rate_hz,"Primary firing-rate measure: (n firings - 1)/(last firing - first firing), Hz.",numeric
+plateau_mean_instantaneous_rate_hz,"Mean of reciprocal inter-spike intervals within plateau, Hz; sensitivity outcome.",numeric
+plateau_median_instantaneous_rate_hz,"Median instantaneous firing rate within plateau, Hz.",numeric
+plateau_mean_isi_s,"Mean plateau inter-spike interval, seconds.",numeric
+plateau_sd_isi_s,"Standard deviation of plateau inter-spike intervals, seconds.",numeric
+plateau_cv_isi_percent,"Coefficient of variation of plateau inter-spike intervals, percent.",numeric
+muap_peak_to_peak_mean_raw,Mean peak-to-peak surface MUAP amplitude across available channels in raw NeuroMap export units. Absolute units were not used for cross-recording interpretation.,numeric
+muap_peak_to_peak_max_raw,Maximum channel peak-to-peak surface MUAP amplitude in raw NeuroMap export units.,numeric
+validation_tier,"Stage 2D validation tier (A_clean, B_segmentation_review, C_rate_qc_review, D_rate_not_calculable, or E_plateau_overlap_review).",categorical
+primary_eligible,Yes when the MU observation passed primary Stage 2E eligibility before the within-bout contrast requirement.,logical
+primary_exclusion_reasons,"Semicolon-delimited primary exclusion reasons, if any.",text
+sensitivity_5plus_eligible,Yes when eligible for the >=5 plateau firings sensitivity dataset.,logical
+sensitivity_Aclean_eligible,Yes when eligible for the A-clean sensitivity dataset.,logical
+sensitivity_A_or_B_eligible,Yes when eligible for the A-clean or B-segmentation-review sensitivity dataset.,logical
+within_bout_standardizable,Stage 2E indicator that the primary dataset had sufficient within-bout MUAP variation for standardization. The R script recalculates this after each sensitivity restriction.,logical
