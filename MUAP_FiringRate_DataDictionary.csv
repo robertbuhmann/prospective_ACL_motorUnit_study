@@ -1,0 +1,18 @@
+variable,description
+participant_id,"De-identified participant identifier preserving the numeric study ID (e.g., P001)."
+recording_id,"De-identified identifier for an original Delsys recording, unique within participant."
+original_mu_number,Original Delsys motor-unit number within the recording.
+bout_id,Unique de-identified contraction-bout identifier.
+timepoint,"Study timepoint: Pre-op, 2wks, 6wks, 3months, or 6months."
+limb,ACL-reconstructed/affected limb (ACL) or contralateral limb (Opp).
+muscle,Vastus medialis (VM) or vastus lateralis (VL).
+contraction_intensity_percent,"Assigned submaximal contraction intensity as percent MVC (20, 50, or 75)."
+plateau_n_firings,Number of identified firings within the nominal 10-s plateau.
+plateau_train_rate_hz,Primary firing-rate outcome: (n-1)/(last firing - first firing) within the nominal plateau.
+plateau_mean_instantaneous_rate_hz,Sensitivity outcome: mean reciprocal inter-spike interval within the nominal plateau.
+muap_peak_to_peak_mean_raw,Mean peak-to-peak MUAP amplitude across waveform channels in original export units.
+stage2d_validation_tier,"Stage 2D validation tier: A_clean, B_segmentation_review, C_rate_qc_review, D_rate_not_calculable, or E_plateau_overlap_review."
+primary_eligible,Eligibility for the Stage 2E primary model-ready dataset.
+sensitivity_5plus_eligible,Eligibility for the sensitivity dataset requiring at least five plateau firings.
+sensitivity_A_clean_eligible,Eligibility for the A-clean-only sensitivity dataset.
+sensitivity_A_or_B_eligible,Eligibility for the A-clean plus B-segmentation-review sensitivity dataset.
