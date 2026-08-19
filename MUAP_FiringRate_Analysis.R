@@ -10,7 +10,7 @@
 #   tidyverse
 #
 # Input:
-#   MUAP_FiringRate_Data_part*.csv
+#   MUAP_FiringRate_Data_coded_part*.csv
 #
 # Model structure:
 #   fixed effects:
@@ -48,37 +48,34 @@ variance_prior_shape <- 2.5
 variance_prior_rate <- 0.5
 
 data_files <- list.files(
-  pattern = "^MUAP_FiringRate_Data_part[0-9]+\\.csv$"
+  pattern = "^MUAP_FiringRate_Data_coded_part[0-9]+\\.csv$"
 )
 
 if (length(data_files) == 0) {
-  stop("No MUAP_FiringRate_Data_part*.csv files were found.")
+  stop("No MUAP_FiringRate_Data_coded_part*.csv files were found.")
 }
 
-d <- map_dfr(
-  data_files,
-  ~ read.csv(.x, stringsAsFactors = FALSE)
-) %>%
-  mutate(
-    participant_id = factor(participant_id),
-    recording_id = factor(recording_id),
-    original_mu_number = as.integer(original_mu_number),
-    recording_mu_id = factor(
-      paste(recording_id, sprintf("MU%03d", original_mu_number), sep = "_")
-    ),
-    bout_id = factor(bout_id),
-    contraction_intensity_percent = as.character(contraction_intensity_percent),
+d <- map_dfr(data_files, ~ read.csv(.x, stringsAsFactors = FALSE)) %>%
+  transmute(
+    participant_id = factor(sprintf("P%03d", pid)),
+    recording_id = factor(sprintf("P%03d_R%03d", pid, rec)),
+    original_mu_number = as.integer(mu),
+    recording_mu_id = factor(sprintf("P%03d_R%03d_MU%03d", pid, rec, mu)),
+    bout_id = factor(sprintf("P%03d_R%03d_B%02d", pid, rec, bout)),
+    contraction_intensity_percent = as.character(int),
     timepoint = factor(
-      timepoint,
+      c("Pre-op", "2wks", "6wks", "3months", "6months")[tp + 1],
       levels = c("Pre-op", "2wks", "6wks", "3months", "6months")
     ),
-    limb = factor(limb, levels = c("Opp", "ACL")),
-    muscle = factor(muscle, levels = c("VM", "VL")),
-    plateau_n_firings = as.numeric(plateau_n_firings),
-    plateau_train_rate_hz = as.numeric(plateau_train_rate_hz),
-    plateau_mean_instantaneous_rate_hz =
-      as.numeric(plateau_mean_instantaneous_rate_hz),
-    muap_peak_to_peak_mean_raw = as.numeric(muap_peak_to_peak_mean_raw)
+    limb = factor(if_else(limb == 1, "ACL", "Opp"), levels = c("Opp", "ACL")),
+    muscle = factor(if_else(muscle == 1, "VL", "VM"), levels = c("VM", "VL")),
+    plateau_train_rate_hz = as.numeric(fr),
+    plateau_mean_instantaneous_rate_hz = as.numeric(ifr),
+    muap_peak_to_peak_mean_raw = as.numeric(muap),
+    primary_eligible = if_else(substr(elig, 1, 1) == "1", "Yes", "No"),
+    sensitivity_5plus_eligible = if_else(substr(elig, 2, 2) == "1", "Yes", "No"),
+    sensitivity_A_clean_eligible = if_else(substr(elig, 3, 3) == "1", "Yes", "No"),
+    sensitivity_A_or_B_eligible = if_else(substr(elig, 4, 4) == "1", "Yes", "No")
   )
 
 prepare_dataset <- function(data, eligibility_variable, outcome_variable) {
@@ -100,10 +97,7 @@ prepare_dataset <- function(data, eligibility_variable, outcome_variable) {
       is.finite(bout_log_muap_sd),
       bout_log_muap_sd > 0
     ) %>%
-    mutate(
-      z_log_muap_within_bout =
-        (log_muap - mean(log_muap)) / sd(log_muap)
-    ) %>%
+    mutate(z_log_muap_within_bout = (log_muap - mean(log_muap)) / sd(log_muap)) %>%
     ungroup() %>%
     mutate(outcome = .data[[outcome_variable]])
 }
@@ -182,11 +176,11 @@ data {
   matrix[N, K] X;
   vector[N] y;
   int<lower=1> J_participant;
-  array[N] int<lower=1, upper=J_participant> participant;
+  int<lower=1, upper=J_participant> participant[N];
   int<lower=1> J_mu;
-  array[N] int<lower=1, upper=J_mu> recording_mu;
+  int<lower=1, upper=J_mu> recording_mu[N];
   int<lower=1> J_bout;
-  array[N] int<lower=1, upper=J_bout> bout;
+  int<lower=1, upper=J_bout> bout[N];
   real<lower=0> coefficient_prior_sd;
   real<lower=0> variance_prior_shape;
   real<lower=0> variance_prior_rate;
@@ -267,18 +261,11 @@ fit_muap_model <- function(data, model_name, limb_modifier = FALSE, seed = seed_
       model = model_name,
       parameter_type = "fixed_effect",
       parameter = colnames(beta_draws_hz)[j],
-      posterior_mean = mean(draws),
-      posterior_sd = sd(draws),
-      posterior_median = median(draws),
-      lower_95_CrI = quantile(draws, 0.025),
-      upper_95_CrI = quantile(draws, 0.975),
-      Pr_gt_0 = mean(draws > 0),
-      Pr_lt_0 = mean(draws < 0),
-      R_hat = beta_rhat[j],
-      n_rows = nrow(data),
-      n_participants = n_distinct(data$participant_id),
-      n_recording_MUs = n_distinct(data$recording_mu_id),
-      n_bouts = n_distinct(data$bout_id)
+      posterior_mean = mean(draws), posterior_sd = sd(draws), posterior_median = median(draws),
+      lower_95_CrI = quantile(draws, 0.025), upper_95_CrI = quantile(draws, 0.975),
+      Pr_gt_0 = mean(draws > 0), Pr_lt_0 = mean(draws < 0), R_hat = beta_rhat[j],
+      n_rows = nrow(data), n_participants = n_distinct(data$participant_id),
+      n_recording_MUs = n_distinct(data$recording_mu_id), n_bouts = n_distinct(data$bout_id)
     )
   })
 
@@ -296,18 +283,11 @@ fit_muap_model <- function(data, model_name, limb_modifier = FALSE, seed = seed_
       model = model_name,
       parameter_type = "standard_deviation",
       parameter = variance_names[[par]],
-      posterior_mean = mean(sd_draws_hz),
-      posterior_sd = sd(sd_draws_hz),
-      posterior_median = median(sd_draws_hz),
-      lower_95_CrI = quantile(sd_draws_hz, 0.025),
-      upper_95_CrI = quantile(sd_draws_hz, 0.975),
-      Pr_gt_0 = mean(sd_draws_hz > 0),
-      Pr_lt_0 = mean(sd_draws_hz < 0),
-      R_hat = stan_summary[par, "Rhat"],
-      n_rows = nrow(data),
-      n_participants = n_distinct(data$participant_id),
-      n_recording_MUs = n_distinct(data$recording_mu_id),
-      n_bouts = n_distinct(data$bout_id)
+      posterior_mean = mean(sd_draws_hz), posterior_sd = sd(sd_draws_hz), posterior_median = median(sd_draws_hz),
+      lower_95_CrI = quantile(sd_draws_hz, 0.025), upper_95_CrI = quantile(sd_draws_hz, 0.975),
+      Pr_gt_0 = mean(sd_draws_hz > 0), Pr_lt_0 = mean(sd_draws_hz < 0), R_hat = stan_summary[par, "Rhat"],
+      n_rows = nrow(data), n_participants = n_distinct(data$participant_id),
+      n_recording_MUs = n_distinct(data$recording_mu_id), n_bouts = n_distinct(data$bout_id)
     )
   })
 
@@ -328,12 +308,8 @@ fit_A_clean <- fit_muap_model(sens_A_clean, "sensitivity_A_clean", FALSE, seed_s
 fit_mean_inst <- fit_muap_model(sens_mean_inst, "sensitivity_mean_instantaneous_rate", FALSE, seed_set + 6)
 
 all_model_summary <- bind_rows(
-  fit_primary$summary,
-  fit_limb$summary,
-  fit_5plus$summary,
-  fit_A_or_B$summary,
-  fit_A_clean$summary,
-  fit_mean_inst$summary
+  fit_primary$summary, fit_limb$summary, fit_5plus$summary,
+  fit_A_or_B$summary, fit_A_clean$summary, fit_mean_inst$summary
 )
 write.csv(all_model_summary, "MUAP_FiringRate_R_model_posterior_summary.csv", row.names = FALSE)
 
@@ -345,12 +321,9 @@ summarise_draws <- function(draws, label) {
   tibble(
     slope = label,
     posterior_mean_Hz_per_1SD_logMUAP = mean(draws),
-    posterior_sd = sd(draws),
-    posterior_median = median(draws),
-    lower_95_CrI = quantile(draws, 0.025),
-    upper_95_CrI = quantile(draws, 0.975),
-    Pr_gt_0 = mean(draws > 0),
-    Pr_lt_0 = mean(draws < 0)
+    posterior_sd = sd(draws), posterior_median = median(draws),
+    lower_95_CrI = quantile(draws, 0.025), upper_95_CrI = quantile(draws, 0.975),
+    Pr_gt_0 = mean(draws > 0), Pr_lt_0 = mean(draws < 0)
   )
 }
 
@@ -362,8 +335,7 @@ limb_slopes <- bind_rows(
 write.csv(limb_slopes, "MUAP_FiringRate_R_limb_modifier_slopes.csv", row.names = FALSE)
 
 get_fixed <- function(fit_object, parameter) {
-  fit_object$summary %>%
-    filter(parameter_type == "fixed_effect", .data$parameter == parameter)
+  fit_object$summary %>% filter(parameter_type == "fixed_effect", .data$parameter == parameter)
 }
 
 publication_results <- bind_rows(
@@ -405,7 +377,7 @@ saveRDS(
 
 capture.output(sessionInfo(), file = "sessionInfo_MUAP_analysis.txt")
 
-# Reference values from the original Stage 2F v3 implementation:
+# Reference values from original Stage 2F v3:
 # Primary: -3.7128 Hz (95% CrI -3.7839 to -3.6392)
 # >=5 firings: -3.7383 Hz (-3.8089 to -3.6677)
 # A-clean + B: -3.7010 Hz (-3.7731 to -3.6287)
