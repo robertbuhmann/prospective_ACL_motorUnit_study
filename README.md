@@ -19,8 +19,8 @@ The peer-review revision added a motor-unit-level analysis examining the relatio
 
 Files:
 
-- `MUAP_FiringRate_Data.csv` — de-identified motor-unit analytical dataset.
-- `MUAP_FiringRate_DataDictionary.csv` — variable definitions.
+- `MUAP_FiringRate_Data_coded_part01.csv` to `MUAP_FiringRate_Data_coded_part16.csv` — de-identified motor-unit analytical dataset split into repository-friendly coded CSV files; the R script combines and decodes them automatically.
+- `MUAP_FiringRate_DataDictionary.csv` — variable definitions and coding.
 - `MUAP_FiringRate_Analysis.R` — R/Stan implementation of the final crossed-hierarchical analysis.
 - `MUAP_FiringRate_ReferenceResults.csv` — reference estimates from the final Stage 2F v3 analysis used to check the R implementation.
 
@@ -32,7 +32,7 @@ Surface MUAP amplitude is treated as an electrophysiological characteristic and 
 
 ## De-identification
 
-Participant names and original recording filenames have been removed from the public MUAP dataset. Participant identifiers use the same `P001`-style study IDs as the primary modelling dataset. Recording, bout, and motor-unit identifiers are de-identified but preserve the grouping structure required for reproducible analysis.
+Participant names and original recording filenames have been removed from the public MUAP dataset. The coded files retain only numeric study participant, recording, motor-unit and bout identifiers plus the variables needed to reproduce the analysis. The R script reconstructs the same `P001`-style participant IDs used in the primary modelling dataset and preserves the grouping structure required for reproducible analysis.
 
 ## Reproducibility
 
