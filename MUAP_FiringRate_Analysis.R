@@ -10,7 +10,7 @@
 #   tidyverse
 #
 # Input:
-#   MUAP_FiringRate_Data_coded_part*.csv
+#   MUAP_FiringRate_Data_gziphex_part*.txt
 #
 # Model structure:
 #   fixed effects:
@@ -47,35 +47,74 @@ coefficient_prior_sd <- 2.5
 variance_prior_shape <- 2.5
 variance_prior_rate <- 0.5
 
-data_files <- list.files(
-  pattern = "^MUAP_FiringRate_Data_coded_part[0-9]+\\.csv$"
+data_hex_files <- list.files(
+  pattern = "^MUAP_FiringRate_Data_gziphex_part[0-9]+\\.txt$"
 )
 
-if (length(data_files) == 0) {
-  stop("No MUAP_FiringRate_Data_coded_part*.csv files were found.")
+if (length(data_hex_files) == 0) {
+  stop("No MUAP_FiringRate_Data_gziphex_part*.txt files were found.")
 }
 
-d <- map_dfr(data_files, ~ read.csv(.x, stringsAsFactors = FALSE)) %>%
+# The de-identified analytical CSV is stored as a gzip-compressed
+# hexadecimal text archive so it can be versioned reliably on GitHub.
+# Decode using base R only; no additional package is required.
+hex_text <- paste0(
+  vapply(
+    sort(data_hex_files),
+    function(x) paste0(readLines(x, warn = FALSE), collapse = ""),
+    character(1)
+  ),
+  collapse = ""
+)
+
+hex_pairs <- substring(
+  hex_text,
+  seq(1, nchar(hex_text), by = 2),
+  seq(2, nchar(hex_text), by = 2)
+)
+
+compressed_raw <- as.raw(strtoi(hex_pairs, base = 16L))
+csv_raw <- memDecompress(compressed_raw, type = "gzip")
+csv_text <- rawToChar(csv_raw)
+
+d <- read.csv(
+  text = csv_text,
+  stringsAsFactors = FALSE
+) %>%
   transmute(
     participant_id = factor(sprintf("P%03d", pid)),
     recording_id = factor(sprintf("P%03d_R%03d", pid, rec)),
     original_mu_number = as.integer(mu),
-    recording_mu_id = factor(sprintf("P%03d_R%03d_MU%03d", pid, rec, mu)),
-    bout_id = factor(sprintf("P%03d_R%03d_B%02d", pid, rec, bout)),
+    recording_mu_id = factor(
+      sprintf("P%03d_R%03d_MU%03d", pid, rec, mu)
+    ),
+    bout_id = factor(
+      sprintf("P%03d_R%03d_B%02d", pid, rec, bout)
+    ),
     contraction_intensity_percent = as.character(int),
     timepoint = factor(
       c("Pre-op", "2wks", "6wks", "3months", "6months")[tp + 1],
       levels = c("Pre-op", "2wks", "6wks", "3months", "6months")
     ),
-    limb = factor(if_else(limb == 1, "ACL", "Opp"), levels = c("Opp", "ACL")),
-    muscle = factor(if_else(muscle == 1, "VL", "VM"), levels = c("VM", "VL")),
+    limb = factor(
+      if_else(limb == 1, "ACL", "Opp"),
+      levels = c("Opp", "ACL")
+    ),
+    muscle = factor(
+      if_else(muscle == 1, "VL", "VM"),
+      levels = c("VM", "VL")
+    ),
     plateau_train_rate_hz = as.numeric(fr),
     plateau_mean_instantaneous_rate_hz = as.numeric(ifr),
     muap_peak_to_peak_mean_raw = as.numeric(muap),
-    primary_eligible = if_else(substr(elig, 1, 1) == "1", "Yes", "No"),
-    sensitivity_5plus_eligible = if_else(substr(elig, 2, 2) == "1", "Yes", "No"),
-    sensitivity_A_clean_eligible = if_else(substr(elig, 3, 3) == "1", "Yes", "No"),
-    sensitivity_A_or_B_eligible = if_else(substr(elig, 4, 4) == "1", "Yes", "No")
+    primary_eligible =
+      if_else(substr(elig, 1, 1) == "1", "Yes", "No"),
+    sensitivity_5plus_eligible =
+      if_else(substr(elig, 2, 2) == "1", "Yes", "No"),
+    sensitivity_A_clean_eligible =
+      if_else(substr(elig, 3, 3) == "1", "Yes", "No"),
+    sensitivity_A_or_B_eligible =
+      if_else(substr(elig, 4, 4) == "1", "Yes", "No")
   )
 
 prepare_dataset <- function(data, eligibility_variable, outcome_variable) {
@@ -97,7 +136,10 @@ prepare_dataset <- function(data, eligibility_variable, outcome_variable) {
       is.finite(bout_log_muap_sd),
       bout_log_muap_sd > 0
     ) %>%
-    mutate(z_log_muap_within_bout = (log_muap - mean(log_muap)) / sd(log_muap)) %>%
+    mutate(
+      z_log_muap_within_bout =
+        (log_muap - mean(log_muap)) / sd(log_muap)
+    ) %>%
     ungroup() %>%
     mutate(outcome = .data[[outcome_variable]])
 }
@@ -261,11 +303,18 @@ fit_muap_model <- function(data, model_name, limb_modifier = FALSE, seed = seed_
       model = model_name,
       parameter_type = "fixed_effect",
       parameter = colnames(beta_draws_hz)[j],
-      posterior_mean = mean(draws), posterior_sd = sd(draws), posterior_median = median(draws),
-      lower_95_CrI = quantile(draws, 0.025), upper_95_CrI = quantile(draws, 0.975),
-      Pr_gt_0 = mean(draws > 0), Pr_lt_0 = mean(draws < 0), R_hat = beta_rhat[j],
-      n_rows = nrow(data), n_participants = n_distinct(data$participant_id),
-      n_recording_MUs = n_distinct(data$recording_mu_id), n_bouts = n_distinct(data$bout_id)
+      posterior_mean = mean(draws),
+      posterior_sd = sd(draws),
+      posterior_median = median(draws),
+      lower_95_CrI = quantile(draws, 0.025),
+      upper_95_CrI = quantile(draws, 0.975),
+      Pr_gt_0 = mean(draws > 0),
+      Pr_lt_0 = mean(draws < 0),
+      R_hat = beta_rhat[j],
+      n_rows = nrow(data),
+      n_participants = n_distinct(data$participant_id),
+      n_recording_MUs = n_distinct(data$recording_mu_id),
+      n_bouts = n_distinct(data$bout_id)
     )
   })
 
@@ -283,11 +332,18 @@ fit_muap_model <- function(data, model_name, limb_modifier = FALSE, seed = seed_
       model = model_name,
       parameter_type = "standard_deviation",
       parameter = variance_names[[par]],
-      posterior_mean = mean(sd_draws_hz), posterior_sd = sd(sd_draws_hz), posterior_median = median(sd_draws_hz),
-      lower_95_CrI = quantile(sd_draws_hz, 0.025), upper_95_CrI = quantile(sd_draws_hz, 0.975),
-      Pr_gt_0 = mean(sd_draws_hz > 0), Pr_lt_0 = mean(sd_draws_hz < 0), R_hat = stan_summary[par, "Rhat"],
-      n_rows = nrow(data), n_participants = n_distinct(data$participant_id),
-      n_recording_MUs = n_distinct(data$recording_mu_id), n_bouts = n_distinct(data$bout_id)
+      posterior_mean = mean(sd_draws_hz),
+      posterior_sd = sd(sd_draws_hz),
+      posterior_median = median(sd_draws_hz),
+      lower_95_CrI = quantile(sd_draws_hz, 0.025),
+      upper_95_CrI = quantile(sd_draws_hz, 0.975),
+      Pr_gt_0 = mean(sd_draws_hz > 0),
+      Pr_lt_0 = mean(sd_draws_hz < 0),
+      R_hat = stan_summary[par, "Rhat"],
+      n_rows = nrow(data),
+      n_participants = n_distinct(data$participant_id),
+      n_recording_MUs = n_distinct(data$recording_mu_id),
+      n_bouts = n_distinct(data$bout_id)
     )
   })
 
@@ -308,8 +364,12 @@ fit_A_clean <- fit_muap_model(sens_A_clean, "sensitivity_A_clean", FALSE, seed_s
 fit_mean_inst <- fit_muap_model(sens_mean_inst, "sensitivity_mean_instantaneous_rate", FALSE, seed_set + 6)
 
 all_model_summary <- bind_rows(
-  fit_primary$summary, fit_limb$summary, fit_5plus$summary,
-  fit_A_or_B$summary, fit_A_clean$summary, fit_mean_inst$summary
+  fit_primary$summary,
+  fit_limb$summary,
+  fit_5plus$summary,
+  fit_A_or_B$summary,
+  fit_A_clean$summary,
+  fit_mean_inst$summary
 )
 write.csv(all_model_summary, "MUAP_FiringRate_R_model_posterior_summary.csv", row.names = FALSE)
 
@@ -321,9 +381,12 @@ summarise_draws <- function(draws, label) {
   tibble(
     slope = label,
     posterior_mean_Hz_per_1SD_logMUAP = mean(draws),
-    posterior_sd = sd(draws), posterior_median = median(draws),
-    lower_95_CrI = quantile(draws, 0.025), upper_95_CrI = quantile(draws, 0.975),
-    Pr_gt_0 = mean(draws > 0), Pr_lt_0 = mean(draws < 0)
+    posterior_sd = sd(draws),
+    posterior_median = median(draws),
+    lower_95_CrI = quantile(draws, 0.025),
+    upper_95_CrI = quantile(draws, 0.975),
+    Pr_gt_0 = mean(draws > 0),
+    Pr_lt_0 = mean(draws < 0)
   )
 }
 
@@ -335,7 +398,8 @@ limb_slopes <- bind_rows(
 write.csv(limb_slopes, "MUAP_FiringRate_R_limb_modifier_slopes.csv", row.names = FALSE)
 
 get_fixed <- function(fit_object, parameter) {
-  fit_object$summary %>% filter(parameter_type == "fixed_effect", .data$parameter == parameter)
+  fit_object$summary %>%
+    filter(parameter_type == "fixed_effect", .data$parameter == parameter)
 }
 
 publication_results <- bind_rows(
